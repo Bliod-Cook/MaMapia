@@ -1,6 +1,8 @@
 package mamapia.world.blocks;
 
 import arc.Core;
+import arc.graphics.Color;
+import arc.graphics.g2d.Draw;
 import arc.math.Mathf;
 import arc.math.geom.Point2;
 import arc.scene.ui.Slider;
@@ -8,6 +10,7 @@ import arc.scene.ui.layout.Table;
 import arc.struct.ObjectSet;
 import arc.struct.Seq;
 import arc.util.Log;
+import arc.util.Tmp;
 import arc.util.io.Reads;
 import arc.util.io.Writes;
 import mamapia.ui.ContentSelect;
@@ -20,6 +23,9 @@ import mindustry.game.Team;
 import mindustry.game.Teams.TeamData;
 import mindustry.gen.Building;
 import mindustry.gen.Call;
+import mindustry.graphics.Drawf;
+import mindustry.graphics.Layer;
+import mindustry.graphics.Pal;
 import mindustry.type.Item;
 import mindustry.ui.Styles;
 import mindustry.world.Block;
@@ -356,7 +362,8 @@ public class TerrainBrushBlock extends Block{
 
             table.row();
             table.add("Range: " + range).color(mindustry.graphics.Pal.accent).left().row();
-            table.add("Tip: open config and click on the map to apply.").wrap().width(240f).left().padTop(4f).row();
+            table.add("Tip: hover to preview; click on the map to apply.").wrap().width(240f).left().padTop(4f).row();
+            table.add("Preview: green=place, red=remove, dim=not enough items.").wrap().width(240f).left().row();
 
             table.update(() -> {
                 if(uiMode[0] != mode){
@@ -393,6 +400,143 @@ public class TerrainBrushBlock extends Block{
             //do not use configure() here; it would overwrite lastConfig with a Point2
             Call.tileConfig(player, this, new Point2(tx, ty));
             return true;
+        }
+
+        @Override
+        public void drawConfigure(){
+            super.drawConfigure();
+
+            if(world == null || state == null) return;
+            if(control == null || control.input == null || control.input.config == null) return;
+            if(!control.input.config.isShown() || control.input.config.getSelected() != this) return;
+
+            //keep behavior consistent with applyAt()
+            if(state.getPlanet() != null && state.getPlanet() != Planets.serpulo) return;
+
+            float prevZ = Draw.z();
+            Draw.z(Layer.overlayUI);
+
+            Drawf.dashCircle(x, y, range * tilesize, Pal.accent);
+
+            Tmp.v1.set(Core.input.mouseWorld());
+            int tx = World.toTile(Tmp.v1.x);
+            int ty = World.toTile(Tmp.v1.y);
+
+            if(Mathf.dst2(tileX(), tileY(), tx, ty) > range * range){
+                Draw.z(prevZ);
+                return;
+            }
+
+            int r = Mathf.clamp(brushRadius, 0, maxRadius);
+            Item cost = costFor(mode, target);
+            if(cost == null) cost = Items.copper;
+
+            int available = items.get(cost);
+            int used = 0;
+
+            for(int dx = -r; dx <= r; dx++){
+                for(int dy = -r; dy <= r; dy++){
+                    Tile t = world.tile(tx + dx, ty + dy);
+                    if(t == null) continue;
+
+                    //avoid previewing inside undiscovered static fog
+                    if(state.rules.staticFog && state.rules.fog && !fogControl.isDiscovered(team, t.x, t.y)){
+                        continue;
+                    }
+
+                    boolean editable = canEdit(t, team);
+
+                    boolean change;
+                    boolean placeGhost;
+                    boolean placeMark;
+                    boolean removeMark;
+
+                    if(mode == modeFloor){
+                        if(!(target instanceof Floor) || target instanceof OverlayFloor) continue;
+                        Floor floor = (Floor)target;
+
+                        boolean needsOverlayClear = !floor.supportsOverlay && t.overlay() != Blocks.air;
+                        boolean floorChange = t.floor() != floor;
+
+                        change = floorChange || needsOverlayClear;
+                        placeGhost = floorChange;
+                        placeMark = floorChange;
+                        removeMark = needsOverlayClear;
+                    }else if(mode == modeOre){
+                        if(target != Blocks.air && !(target instanceof OverlayFloor)) continue;
+
+                        if(target != Blocks.air && !t.floor().hasSurface()){
+                            change = false;
+                        }else{
+                            change = t.overlay() != target;
+                        }
+
+                        placeGhost = change && target != Blocks.air;
+                        placeMark = change && target != Blocks.air;
+                        removeMark = change && target == Blocks.air;
+                    }else if(mode == modeWall){
+                        //avoid wiping player blocks; only place on empty, or allow removal
+                        if(target != Blocks.air && t.block() != Blocks.air){
+                            change = false;
+                        }else{
+                            change = t.block() != target;
+                        }
+
+                        placeGhost = change && target != Blocks.air;
+                        placeMark = change && target != Blocks.air;
+                        removeMark = change && target == Blocks.air;
+                    }else{
+                        continue;
+                    }
+
+                    if(!change) continue;
+
+                    float ghostAlpha;
+                    float lineAlpha;
+                    Color placeColor;
+                    Color removeColor;
+
+                    if(!editable){
+                        ghostAlpha = 0.20f;
+                        lineAlpha = 0.60f;
+                        placeColor = Pal.noplace;
+                        removeColor = Pal.noplace;
+                    }else{
+                        boolean willApply = used < available;
+                        used++;
+
+                        if(willApply){
+                            ghostAlpha = 0.65f;
+                            lineAlpha = 1f;
+                        }else{
+                            ghostAlpha = 0.20f;
+                            lineAlpha = 0.25f;
+                        }
+
+                        placeColor = Pal.place;
+                        removeColor = Pal.remove;
+                    }
+
+                    if(placeGhost){
+                        Draw.z(Layer.overlayUI);
+                        Draw.color(Color.white);
+                        Draw.alpha(ghostAlpha);
+                        target.drawBase(t);
+                        Draw.reset();
+                    }
+
+                    float markerSize = tilesize / 2f;
+                    if(placeMark){
+                        Drawf.square(t.worldx(), t.worldy(), markerSize, Tmp.c1.set(placeColor).a(lineAlpha));
+                    }
+
+                    if(removeMark){
+                        Drawf.cross(t.worldx(), t.worldy(), markerSize, Tmp.c1.set(removeColor).a(lineAlpha));
+                    }
+                }
+            }
+
+            Draw.z(prevZ);
         }
 
         private void applyAt(int tx, int ty){
