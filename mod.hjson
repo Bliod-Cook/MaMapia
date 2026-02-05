@@ -1,0 +1,24 @@
+#the mod name as displayed in-game
+displayName: "MaMapia"
+
+#the internal name of your mod
+name: "ma-mapia"
+
+#your name
+author: "bliod"
+
+#the fully qualified main class of the mod
+main: "mamapia.MaMapiaMod"
+
+#the mod description as seen in the mod dialog
+description: "在赛普罗用资源改造地形/墙/矿物的地形刷。"
+
+#the mod version
+version: "0.1.0"
+
+#the minimum game build required to run this mod
+minGameVersion: 154
+
+#this is a java mod
+java: true
+
