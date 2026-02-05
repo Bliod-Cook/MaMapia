@@ -22,8 +22,13 @@ public class ContentSelect{
         ButtonGroup<ImageButton> group = new ButtonGroup<>();
         group.setMinCheckCount(0);
 
+        float cellSize = 40f;
+        float edgePad = 4f;
+
         Table cont = new Table().top();
-        cont.defaults().size(40f);
+        cont.defaults().size(cellSize);
+        //avoid ScrollPane/background/scrollbar clipping the first/last columns
+        cont.margin(0f, edgePad, 0f, edgePad);
 
         if(search != null) search.clearText();
 
@@ -68,16 +73,22 @@ public class ContentSelect{
         }
 
         ScrollPane pane = new ScrollPane(cont, Styles.smallPane);
-        pane.setScrollingDisabled(true, false);
+
+        float desiredWidth = cellSize * columns + edgePad * 2f + pane.getScrollBarWidth();
+        float maxWidth = Core.graphics.getWidth() * 0.9f;
+        boolean allowHScroll = desiredWidth > maxWidth;
+        pane.setScrollingDisabled(!allowHScroll, false);
+
         pane.exited(() -> {
             if(pane.hasScroll()){
                 Core.scene.setScrollFocus(null);
             }
         });
         pane.setOverscroll(false, false);
-        main.add(pane).maxHeight(40f * rows);
+        //ensure the grid drives the config width; otherwise it may get squished and clipped
+        float maxHeight = Math.min(cellSize * rows, Core.graphics.getHeight() * 0.55f);
+        main.add(pane).growX().minWidth(Math.min(desiredWidth, maxWidth)).maxHeight(maxHeight);
 
-        table.top().add(main);
+        table.top().add(main).growX();
     }
 }
-

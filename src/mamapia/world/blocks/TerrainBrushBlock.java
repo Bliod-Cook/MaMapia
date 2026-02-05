@@ -3,6 +3,7 @@ package mamapia.world.blocks;
 import arc.Core;
 import arc.graphics.Color;
 import arc.graphics.g2d.Draw;
+import arc.input.KeyCode;
 import arc.math.Mathf;
 import arc.math.geom.Point2;
 import arc.scene.ui.Slider;
@@ -339,7 +340,7 @@ public class TerrainBrushBlock extends Block{
                         }
                     },
                     false,
-                    6,
+                    10,
                     8
                 );
             };
@@ -362,10 +363,16 @@ public class TerrainBrushBlock extends Block{
 
             table.row();
             table.add("Range: " + range).color(mindustry.graphics.Pal.accent).left().row();
-            table.add("Tip: hover to preview; click on the map to apply.").wrap().width(240f).left().padTop(4f).row();
-            table.add("Preview: green=place, red=remove, dim=not enough items.").wrap().width(240f).left().row();
+            float infoWidth = Math.min(40f * 8f, Core.graphics.getWidth() * 0.9f);
+            table.add("Tip: hover to preview; click on the map to apply.").wrap().width(infoWidth).left().padTop(4f).row();
+            table.add("Preview: green=place, red=remove, dim=not enough items.").wrap().width(infoWidth).left().row();
 
             table.update(() -> {
+                if(Core.input.keyTap(KeyCode.mouseRight)){
+                    Vars.control.input.config.hideConfig();
+                    return;
+                }
+
                 if(uiMode[0] != mode){
                     uiMode[0] = mode;
                     rebuildTargets[0].run();
